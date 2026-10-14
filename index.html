@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; padding: 20px; color: #fff; }
+  h2 { margin-bottom: 16px; font-size: 18px; }
+  .info { margin-bottom: 20px; font-size: 14px; opacity: 0.7; }
+  .timeline { position: relative; height: 60px; background: rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
+  .selected { position: absolute; top: 0; height: 100%; background: rgba(80,160,255,0.4); }
+  .handle { position: absolute; top: 0; width: 4px; height: 100%; background: #4fa8ff; cursor: ew-resize; z-index: 2; }
+  .handle::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 28px; height: 28px; background: #4fa8ff; border-radius: 50%; }
+  .slider-group { margin-bottom: 16px; }
+  label { display: block; font-size: 13px; margin-bottom: 6px; opacity: 0.8; }
+  input[type=range] { width: 100%; }
+  .times { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 20px; }
+  button { width: 100%; padding: 14px; font-size: 16px; border: none; border-radius: 10px; background: #4fa8ff; color: #fff; cursor: pointer; }
+  button:active { opacity: 0.7; }
+</style>
+</head>
+<body>
+<h2>✂️ Обрезка аудио</h2>
+<div class="info">Длительность: <span id="dur">0</span> с</div>
+
+<div class="timeline" id="timeline">
+  <div class="selected" id="sel"></div>
+  <div class="handle" id="h1"></div>
+  <div class="handle" id="h2"></div>
+</div>
+
+<div class="times">
+  <span>Начало: <b id="t1">0.0</b> с</span>
+  <span>Конец: <b id="t2">0.0</b> с</span>
+</div>
+
+<div class="slider-group">
+  <label>Начало</label>
+  <input type="range" id="s1" min="0" max="100" value="0" step="0.1">
+</div>
+<div class="slider-group">
+  <label>Конец</label>
+  <input type="range" id="s2" min="0" max="100" value="100" step="0.1">
+</div>
+
+<button id="btn">Отправить</button>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+// Duration из URL: ?dur=5.35
+const params = new URLSearchParams(location.search);
+const duration = parseFloat(params.get('dur') || '5');
+
+document.getElementById('dur').textContent = duration.toFixed(1);
+
+const s1 = document.getElementById('s1');
+const s2 = document.getElementById('s2');
+const h1 = document.getElementById('h1');
+const h2 = document.getElementById('h2');
+const sel = document.getElementById('sel');
+const t1 = document.getElementById('t1');
+const t2 = document.getElementById('t2');
+
+function update() {
+  let a = parseFloat(s1.value) / 100 * duration;
+  let b = parseFloat(s2.value) / 100 * duration;
+  if (a > b) { [a, b] = [b, a]; }
+  const p1 = (a / duration * 100);
+  const p2 = (b / duration * 100);
+  h1.style.left = p1 + '%';
+  h2.style.left = p2 + '%';
+  sel.style.left = p1 + '%';
+  sel.style.width = (p2 - p1) + '%';
+  t1.textContent = a.toFixed(1);
+  t2.textContent = b.toFixed(1);
+}
+
+s1.oninput = update;
+s2.oninput = update;
+update();
+
+document.getElementById('btn').onclick = () => {
+  let a = parseFloat(s1.value) / 100 * duration;
+  let b = parseFloat(s2.value) / 100 * duration;
+  if (a > b) [a, b] = [b, a];
+  tg.sendData(JSON.stringify({ start: a, end: b }));
+};
+</script>
+</body>
+</html>   
