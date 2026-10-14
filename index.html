@@ -15,7 +15,7 @@
     overflow: hidden;
   }
   h2 { font-size: 17px; margin-bottom: 12px; }
-  audio { width: 100%; margin-bottom: 20px; }
+  audio { width: 100%; margin-bottom: 16px; }
 
   .timeline-wrap {
     position: relative;
@@ -45,14 +45,31 @@
   }
   .handle:active { cursor: grabbing; transform: translate(-50%,-50%) scale(1.15); }
 
-  .times {
+  .inputs {
     display: flex;
-    justify-content: space-between;
-    font-size: 14px;
-    margin-bottom: 20px;
-    opacity: 0.85;
+    gap: 12px;
+    margin-bottom: 16px;
   }
-  .times b { opacity: 1; }
+  .inputs label {
+    flex: 1;
+    font-size: 13px;
+    display: block;
+    margin-bottom: 4px;
+    opacity: 0.8;
+  }
+  .inputs input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 16px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    outline: none;
+  }
+  .inputs input:focus {
+    border-color: var(--tg-theme-button-color, #4fa8ff);
+  }
 
   button {
     width: 100%;
@@ -79,9 +96,15 @@
   <div class="handle" id="h2"></div>
 </div>
 
-<div class="times">
-  <span>Начало: <b id="t1">0.0</b> с</span>
-  <span>Конец: <b id="t2">0.0</b> с</span>
+<div class="inputs">
+  <div>
+    <label>Начало (сек)</label>
+    <input type="number" id="in1" min="0" step="0.1" value="0">
+  </div>
+  <div>
+    <label>Конец (сек)</label>
+    <input type="number" id="in2" min="0" step="0.1" value="0">
+  </div>
 </div>
 
 <button id="btn">✂️ Отправить</button>
@@ -99,13 +122,9 @@ const player = document.getElementById('player');
 if (src) {
     player.src = src;
     player.onerror = () => {
-        // Fallback: fetch → blob
         fetch(src).then(r => r.blob()).then(blob => {
             player.src = URL.createObjectURL(blob);
-        }).catch(() => {
-            player.parentElement.style.display = 'none';
-            document.querySelector('h2').textContent = '✂️ Обрезка (слушайте голосовое в чате)';
-        });
+        }).catch(() => { player.style.display = 'none'; });
     };
 }
 
@@ -113,81 +132,95 @@ const track = document.getElementById('track');
 const h1 = document.getElementById('h1');
 const h2 = document.getElementById('h2');
 const sel = document.getElementById('sel');
-const t1 = document.getElementById('t1');
-const t2 = document.getElementById('t2');
+const in1 = document.getElementById('in1');
+const in2 = document.getElementById('in2');
+const btn = document.getElementById('btn');
 
-let startPct = 0;   // 0..100
-let endPct = 100;
+let startSec = 0;
+let endSec = duration;
 
-function fmt(sec) {
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return m + ':' + (s < 10 ? '0' : '') + s;
-}
+in2.value = duration.toFixed(1);
+in2.max = duration.toFixed(1);
+in1.max = duration.toFixed(1);
 
 function render() {
-  h1.style.left = startPct + '%';
-  h2.style.left = endPct + '%';
-  sel.style.left = startPct + '%';
-  sel.style.width = (endPct - startPct) + '%';
-  t1.textContent = fmt(startPct / 100 * duration);
-  t2.textContent = fmt(endPct / 100 * duration);
+    const sPct = startSec / duration * 100;
+    const ePct = endSec / duration * 100;
+    h1.style.left = sPct + '%';
+    h2.style.left = ePct + '%';
+    sel.style.left = sPct + '%';
+    sel.style.width = (ePct - sPct) + '%';
+    in1.value = startSec.toFixed(1);
+    in2.value = endSec.toFixed(1);
+}
+
+function setFromPct(pct) {
+    const sec = pct / 100 * duration;
+    return Math.max(0, Math.min(duration, sec));
 }
 
 function pctFromEvent(e) {
-  const rect = track.getBoundingClientRect();
-  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-  return Math.max(0, Math.min(100, x / rect.width * 100));
+    const rect = track.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    return Math.max(0, Math.min(100, x / rect.width * 100));
 }
 
 // --- Drag handles ---
-let dragging = null; // 'h1' | 'h2'
+let dragging = null;
+h1.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dragging = 'h1'; });
+h2.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dragging = 'h2'; });
 
-function onPointerDown(which) {
-  return function(e) {
+document.addEventListener('pointermove', e => {
+    if (!dragging) return;
     e.preventDefault();
-    dragging = which;
-  };
-}
+    const p = pctFromEvent(e);
+    if (dragging === 'h1') startSec = setFromPct(p);
+    else endSec = setFromPct(p);
+    // Не даём пересечься (мин. зазор 0.1с)
+    if (startSec > endSec - 0.1) {
+        if (dragging === 'h1') startSec = endSec - 0.1;
+        else endSec = startSec + 0.1;
+    }
+    render();
+});
+document.addEventListener('pointerup', () => dragging = null);
 
-function onPointerMove(e) {
-  if (!dragging) return;
-  e.preventDefault();
-  const pct = pctFromEvent(e);
-  if (dragging === 'h1') {
-    startPct = Math.min(pct, endPct - 1);
-  } else {
-    endPct = Math.max(pct, startPct + 1);
-  }
-  render();
-}
+// Tap on track → nearest handle
+track.addEventListener('pointerdown', e => {
+    if (e.target === h1 || e.target === h2) return;
+    const p = pctFromEvent(e);
+    const sec = p / 100 * duration;
+    if (Math.abs(sec - startSec) < Math.abs(sec - endSec)) startSec = sec;
+    else endSec = sec;
+    if (startSec > endSec - 0.1) {
+        if (sec < (startSec + endSec) / 2) startSec = endSec - 0.1;
+        else endSec = startSec + 0.1;
+    }
+    render();
+});
 
-function onPointerUp() {
-  dragging = null;
-}
-
-h1.addEventListener('pointerdown', onPointerDown('h1'));
-h2.addEventListener('pointerdown', onPointerDown('h2'));
-document.addEventListener('pointermove', onPointerMove);
-document.addEventListener('pointerup', onPointerUp);
-
-// Tap on track → move nearest handle
-track.addEventListener('pointerdown', function(e) {
-  if (e.target === h1 || e.target === h2) return;
-  const pct = pctFromEvent(e);
-  const d1 = Math.abs(pct - startPct);
-  const d2 = Math.abs(pct - endPct);
-  if (d1 < d2) startPct = Math.min(pct, endPct - 1);
-  else endPct = Math.max(pct, startPct + 1);
-  render();
+// --- Numeric inputs ---
+in1.addEventListener('input', () => {
+    let v = parseFloat(in1.value);
+    if (isNaN(v)) return;
+    startSec = Math.max(0, Math.min(duration, v));
+    if (startSec > endSec - 0.1) startSec = endSec - 0.1;
+    render();
+});
+in2.addEventListener('input', () => {
+    let v = parseFloat(in2.value);
+    if (isNaN(v)) return;
+    endSec = Math.max(0, Math.min(duration, v));
+    if (endSec < startSec + 0.1) endSec = startSec + 0.1;
+    render();
 });
 
 render();
 
-document.getElementById('btn').onclick = () => {
-  const a = startPct / 100 * duration;
-  const b = endPct / 100 * duration;
-  tg.sendData(JSON.stringify({ start: a, end: b }));
+btn.onclick = () => {
+    const a = Math.max(0, startSec);
+    const b = Math.min(duration, endSec);
+    tg.sendData(JSON.stringify({ start: a, end: b }));
 };
 </script>
 </body>
