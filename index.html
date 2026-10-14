@@ -12,7 +12,7 @@
     color: #fff;
     background: var(--tg-theme-bg-color, #1a1a2e);
     min-height: 100vh;
-    ovefrlow: hidden;
+    overflow: hidden;
   }
   h2 { font-size: 17px; margin-bottom: 12px; }
   audio { width: 100%; margin-bottom: 20px; }
@@ -96,7 +96,11 @@ const duration = parseFloat(params.get('dur') || '5');
 const src = params.get('src') || '';
 
 const player = document.getElementById('player');
-if (src) player.src = src;
+if (src) {
+    fetch(src).then(r => r.blob()).then(blob => {
+        player.src = URL.createObjectURL(blob);
+    });
+}
 
 const track = document.getElementById('track');
 const h1 = document.getElementById('h1');
