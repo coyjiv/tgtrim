@@ -97,9 +97,16 @@ const src = params.get('src') || '';
 
 const player = document.getElementById('player');
 if (src) {
-    fetch(src).then(r => r.blob()).then(blob => {
-        player.src = URL.createObjectURL(blob);
-    });
+    player.src = src;
+    player.onerror = () => {
+        // Fallback: fetch → blob
+        fetch(src).then(r => r.blob()).then(blob => {
+            player.src = URL.createObjectURL(blob);
+        }).catch(() => {
+            player.parentElement.style.display = 'none';
+            document.querySelector('h2').textContent = '✂️ Обрезка (слушайте голосовое в чате)';
+        });
+    };
 }
 
 const track = document.getElementById('track');
