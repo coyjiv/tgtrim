@@ -2,30 +2,77 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, sans-serif; padding: 20px; color: #fff; }
-  h2 { margin-bottom: 16px; font-size: 18px; }
-  .info { margin-bottom: 20px; font-size: 14px; opacity: 0.7; }
-  .timeline { position: relative; height: 60px; background: rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
-  .selected { position: absolute; top: 0; height: 100%; background: rgba(80,160,255,0.4); }
-  .handle { position: absolute; top: 0; width: 4px; height: 100%; background: #4fa8ff; cursor: ew-resize; z-index: 2; }
-  .handle::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 28px; height: 28px; background: #4fa8ff; border-radius: 50%; }
-  .slider-group { margin-bottom: 16px; }
-  label { display: block; font-size: 13px; margin-bottom: 6px; opacity: 0.8; }
-  input[type=range] { width: 100%; }
-  .times { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 20px; }
-  button { width: 100%; padding: 14px; font-size: 16px; border: none; border-radius: 10px; background: #4fa8ff; color: #fff; cursor: pointer; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 16px;
+    color: #fff;
+    background: var(--tg-theme-bg-color, #1a1a2e);
+    min-height: 100vh;
+  }
+  h2 { font-size: 17px; margin-bottom: 12px; }
+  audio { width: 100%; margin-bottom: 20px; }
+
+  .timeline-wrap {
+    position: relative;
+    height: 48px;
+    background: var(--tg-theme-hint-color, rgba(255,255,255,0.08));
+    border-radius: 24px;
+    margin-bottom: 16px;
+    touch-action: none;
+  }
+  .selected {
+    position: absolute;
+    top: 0; height: 100%;
+    background: var(--tg-theme-button-color, #4fa8ff);
+    opacity: 0.35;
+    border-radius: 24px;
+  }
+  .handle {
+    position: absolute;
+    top: 50%;
+    width: 32px; height: 32px;
+    background: var(--tg-theme-button-color, #4fa8ff);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .handle:active { cursor: grabbing; transform: translate(-50%,-50%) scale(1.15); }
+
+  .times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 20px;
+    opacity: 0.85;
+  }
+  .times b { opacity: 1; }
+
+  button {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    background: var(--tg-theme-button-color, #4fa8ff);
+    color: var(--tg-theme-button-text-color, #fff);
+    cursor: pointer;
+  }
   button:active { opacity: 0.7; }
 </style>
 </head>
 <body>
-<h2>✂️ Обрезка аудио</h2>
-<div class="info">Длительность: <span id="dur">0</span> с</div>
+<h2>✂️ Обрезка</h2>
 
-<div class="timeline" id="timeline">
+<audio id="player" controls preload="metadata"></audio>
+
+<div class="timeline-wrap" id="track">
   <div class="selected" id="sel"></div>
   <div class="handle" id="h1"></div>
   <div class="handle" id="h2"></div>
@@ -36,58 +83,92 @@
   <span>Конец: <b id="t2">0.0</b> с</span>
 </div>
 
-<div class="slider-group">
-  <label>Начало</label>
-  <input type="range" id="s1" min="0" max="100" value="0" step="0.1">
-</div>
-<div class="slider-group">
-  <label>Конец</label>
-  <input type="range" id="s2" min="0" max="100" value="100" step="0.1">
-</div>
-
-<button id="btn">Отправить</button>
+<button id="btn">✂️ Отправить</button>
 
 <script>
 const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-// Duration из URL: ?dur=5.35
 const params = new URLSearchParams(location.search);
 const duration = parseFloat(params.get('dur') || '5');
+const src = params.get('src') || '';
 
-document.getElementById('dur').textContent = duration.toFixed(1);
+const player = document.getElementById('player');
+if (src) player.src = src;
 
-const s1 = document.getElementById('s1');
-const s2 = document.getElementById('s2');
+const track = document.getElementById('track');
 const h1 = document.getElementById('h1');
 const h2 = document.getElementById('h2');
 const sel = document.getElementById('sel');
 const t1 = document.getElementById('t1');
 const t2 = document.getElementById('t2');
 
-function update() {
-  let a = parseFloat(s1.value) / 100 * duration;
-  let b = parseFloat(s2.value) / 100 * duration;
-  if (a > b) { [a, b] = [b, a]; }
-  const p1 = (a / duration * 100);
-  const p2 = (b / duration * 100);
-  h1.style.left = p1 + '%';
-  h2.style.left = p2 + '%';
-  sel.style.left = p1 + '%';
-  sel.style.width = (p2 - p1) + '%';
-  t1.textContent = a.toFixed(1);
-  t2.textContent = b.toFixed(1);
+let startPct = 0;   // 0..100
+let endPct = 100;
+
+function render() {
+  h1.style.left = startPct + '%';
+  h2.style.left = endPct + '%';
+  sel.style.left = startPct + '%';
+  sel.style.width = (endPct - startPct) + '%';
+  t1.textContent = (startPct / 100 * duration).toFixed(1);
+  t2.textContent = (endPct / 100 * duration).toFixed(1);
 }
 
-s1.oninput = update;
-s2.oninput = update;
-update();
+function pctFromEvent(e) {
+  const rect = track.getBoundingClientRect();
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  return Math.max(0, Math.min(100, x / rect.width * 100));
+}
+
+// --- Drag handles ---
+let dragging = null; // 'h1' | 'h2'
+
+function onPointerDown(which) {
+  return function(e) {
+    e.preventDefault();
+    dragging = which;
+  };
+}
+
+function onPointerMove(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const pct = pctFromEvent(e);
+  if (dragging === 'h1') {
+    startPct = Math.min(pct, endPct - 1);
+  } else {
+    endPct = Math.max(pct, startPct + 1);
+  }
+  render();
+}
+
+function onPointerUp() {
+  dragging = null;
+}
+
+h1.addEventListener('pointerdown', onPointerDown('h1'));
+h2.addEventListener('pointerdown', onPointerDown('h2'));
+document.addEventListener('pointermove', onPointerMove);
+document.addEventListener('pointerup', onPointerUp);
+
+// Tap on track → move nearest handle
+track.addEventListener('pointerdown', function(e) {
+  if (e.target === h1 || e.target === h2) return;
+  const pct = pctFromEvent(e);
+  const d1 = Math.abs(pct - startPct);
+  const d2 = Math.abs(pct - endPct);
+  if (d1 < d2) startPct = Math.min(pct, endPct - 1);
+  else endPct = Math.max(pct, startPct + 1);
+  render();
+});
+
+render();
 
 document.getElementById('btn').onclick = () => {
-  let a = parseFloat(s1.value) / 100 * duration;
-  let b = parseFloat(s2.value) / 100 * duration;
-  if (a > b) [a, b] = [b, a];
+  const a = startPct / 100 * duration;
+  const b = endPct / 100 * duration;
   tg.sendData(JSON.stringify({ start: a, end: b }));
 };
 </script>
