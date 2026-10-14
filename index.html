@@ -119,13 +119,19 @@ const t2 = document.getElementById('t2');
 let startPct = 0;   // 0..100
 let endPct = 100;
 
+function fmt(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
 function render() {
   h1.style.left = startPct + '%';
   h2.style.left = endPct + '%';
   sel.style.left = startPct + '%';
   sel.style.width = (endPct - startPct) + '%';
-  t1.textContent = (startPct / 100 * duration).toFixed(1);
-  t2.textContent = (endPct / 100 * duration).toFixed(1);
+  t1.textContent = fmt(startPct / 100 * duration);
+  t2.textContent = fmt(endPct / 100 * duration);
 }
 
 function pctFromEvent(e) {
