@@ -60,12 +60,14 @@
   .inputs input {
     width: 100%;
     padding: 10px 12px;
-    font-size: 16px;
+    font-size: 18px;
+    font-family: monospace;
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 8px;
     background: rgba(255,255,255,0.05);
     color: #fff;
     outline: none;
+    text-align: center;
   }
   .inputs input:focus {
     border-color: var(--tg-theme-button-color, #4fa8ff);
@@ -98,12 +100,12 @@
 
 <div class="inputs">
   <div>
-    <label>Начало (сек)</label>
-    <input type="number" id="in1" min="0" step="0.1" value="0">
+    <label>Начало</label>
+    <input type="text" id="in1" placeholder="0:00" value="0:00">
   </div>
   <div>
-    <label>Конец (сек)</label>
-    <input type="number" id="in2" min="0" step="0.1" value="0">
+    <label>Конец</label>
+    <input type="text" id="in2" placeholder="0:00" value="0:00">
   </div>
 </div>
 
@@ -134,14 +136,36 @@ const h2 = document.getElementById('h2');
 const sel = document.getElementById('sel');
 const in1 = document.getElementById('in1');
 const in2 = document.getElementById('in2');
-const btn = document.getElementById('btn');
 
 let startSec = 0;
 let endSec = duration;
 
-in2.value = duration.toFixed(1);
-in2.max = duration.toFixed(1);
-in1.max = duration.toFixed(1);
+// --- Форматирование ---
+function fmt(sec) {
+    if (sec >= 3600) {
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.round(sec % 60);
+        return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+// --- Парсинг "MM:SS" или "H:MM:SS" или "90.5" ---
+function parse(str) {
+    str = str.trim();
+    if (!str) return NaN;
+    if (str.includes(':')) {
+        const parts = str.split(':').map(Number);
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return NaN;
+    }
+    const v = parseFloat(str);
+    return isNaN(v) ? NaN : v;
+}
 
 function render() {
     const sPct = startSec / duration * 100;
@@ -150,13 +174,9 @@ function render() {
     h2.style.left = ePct + '%';
     sel.style.left = sPct + '%';
     sel.style.width = (ePct - sPct) + '%';
-    in1.value = startSec.toFixed(1);
-    in2.value = endSec.toFixed(1);
-}
-
-function setFromPct(pct) {
-    const sec = pct / 100 * duration;
-    return Math.max(0, Math.min(duration, sec));
+    // Обновляем инпуты только если не в фокусе (чтобы не перебивать ввод)
+    if (document.activeElement !== in1) in1.value = fmt(startSec);
+    if (document.activeElement !== in2) in2.value = fmt(endSec);
 }
 
 function pctFromEvent(e) {
@@ -165,7 +185,7 @@ function pctFromEvent(e) {
     return Math.max(0, Math.min(100, x / rect.width * 100));
 }
 
-// --- Drag handles ---
+// --- Drag ---
 let dragging = null;
 h1.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dragging = 'h1'; });
 h2.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dragging = 'h2'; });
@@ -174,50 +194,50 @@ document.addEventListener('pointermove', e => {
     if (!dragging) return;
     e.preventDefault();
     const p = pctFromEvent(e);
-    if (dragging === 'h1') startSec = setFromPct(p);
-    else endSec = setFromPct(p);
-    // Не даём пересечься (мин. зазор 0.1с)
-    if (startSec > endSec - 0.1) {
-        if (dragging === 'h1') startSec = endSec - 0.1;
-        else endSec = startSec + 0.1;
-    }
+    const sec = p / 100 * duration;
+    if (dragging === 'h1') startSec = Math.min(sec, endSec - 0.1);
+    else endSec = Math.max(sec, startSec + 0.1);
     render();
 });
 document.addEventListener('pointerup', () => dragging = null);
 
-// Tap on track → nearest handle
 track.addEventListener('pointerdown', e => {
     if (e.target === h1 || e.target === h2) return;
-    const p = pctFromEvent(e);
-    const sec = p / 100 * duration;
-    if (Math.abs(sec - startSec) < Math.abs(sec - endSec)) startSec = sec;
-    else endSec = sec;
-    if (startSec > endSec - 0.1) {
-        if (sec < (startSec + endSec) / 2) startSec = endSec - 0.1;
-        else endSec = startSec + 0.1;
+    const sec = pctFromEvent(e) / 100 * duration;
+    if (Math.abs(sec - startSec) < Math.abs(sec - endSec)) {
+        startSec = Math.min(sec, endSec - 0.1);
+    } else {
+        endSec = Math.max(sec, startSec + 0.1);
     }
     render();
 });
 
-// --- Numeric inputs ---
-in1.addEventListener('input', () => {
-    let v = parseFloat(in1.value);
-    if (isNaN(v)) return;
-    startSec = Math.max(0, Math.min(duration, v));
-    if (startSec > endSec - 0.1) startSec = endSec - 0.1;
+// --- Инпуты ---
+in1.addEventListener('change', () => {
+    const v = parse(in1.value);
+    if (!isNaN(v)) {
+        startSec = Math.max(0, Math.min(duration, v));
+        if (startSec > endSec - 0.1) startSec = endSec - 0.1;
+    }
     render();
 });
-in2.addEventListener('input', () => {
-    let v = parseFloat(in2.value);
-    if (isNaN(v)) return;
-    endSec = Math.max(0, Math.min(duration, v));
-    if (endSec < startSec + 0.1) endSec = startSec + 0.1;
+in2.addEventListener('change', () => {
+    const v = parse(in2.value);
+    if (!isNaN(v)) {
+        endSec = Math.max(0, Math.min(duration, v));
+        if (endSec < startSec + 0.1) endSec = startSec + 0.1;
+    }
     render();
 });
+
+// Enter в инпуте = отправить
+[in1, in2].forEach(el => el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btn').click();
+}));
 
 render();
 
-btn.onclick = () => {
+document.getElementById('btn').onclick = () => {
     const a = Math.max(0, startSec);
     const b = Math.min(duration, endSec);
     tg.sendData(JSON.stringify({ start: a, end: b }));
